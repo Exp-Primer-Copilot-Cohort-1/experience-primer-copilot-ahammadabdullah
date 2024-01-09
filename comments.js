@@ -1,63 +1,61 @@
 // create web server
-// 1. load modules
-const http = require("http");
-const fs = require("fs");
-const url = require("url");
-const qs = require("querystring");
-const template = require("./lib/template.js");
+const express = require("express");
+const app = express();
+const port = 3000;
 const path = require("path");
-const sanitizeHtml = require("sanitize-html");
 
-// 2. create server
-const app = http.createServer(function (request, response) {
-  const _url = request.url;
-  const queryData = url.parse(_url, true).query;
-  const pathname = url.parse(_url, true).pathname;
+// add static files
+app.use(express.static("public"));
 
-  // 3. when user connects to the server
-  if (pathname === "/") {
-    if (queryData.id === undefined) {
-      fs.readdir("./data", function (error, filelist) {
-        const title = "Welcome";
-        const description = "Hello, Node.js";
-        const list = template.list(filelist);
-        const html = template.HTML(
-          title,
-          list,
-          `<h2>${title}</h2>${description}`,
-          `<a href="/create">create</a>`
-        );
-        response.writeHead(200);
-        response.end(html);
-      });
-    } else {
-      fs.readdir("./data", function (error, filelist) {
-        const filteredId = path.parse(queryData.id).base;
-        fs.readFile(`data/${filteredId}`, "utf8", function (err, description) {
-          const title = queryData.id;
-          const sanitizedTitle = sanitizeHtml(title);
-          const sanitizedDescription = sanitizeHtml(description, {
-            allowedTags: ["h1"],
-          });
-          const list = template.list(filelist);
-          const html = template.HTML(
-            sanitizedTitle,
-            list,
-            `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
-            `<a href="/create">create</a>
-              <a href="/update?id=${sanitizedTitle}">update</a>
-              <form action="delete_process" method="post">
-                <input type="hidden" name="id" value="${sanitizedTitle}">
-                <input type="submit" value="delete">
-              </form>`
-          );
-          response.writeHead(200);
-          response.end(html);
-        });
-      });
-    }
-  } else if (pathname === "/create") {
-    fs.readdir("./data", function (error, filelist) {
-      const title = "WEB - create";
-      const list = template.list(filelist);
-      const
+// add body parser
+const bodyParser = require("body-parser");
+app.use(bodyParser.urlencoded({ extended: false }));
+
+// add mongoose
+const mongoose = require("mongoose");
+mongoose.connect("mongodb://localhost/comments", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+// add comment model
+const commentSchema = new mongoose.Schema({
+  name: String,
+  comment: String,
+});
+
+const Comment = mongoose.model("Comment", commentSchema);
+
+// set up routes
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+app.post("/add-comment", (req, res) => {
+  const comment = new Comment({
+    name: req.body.name,
+    comment: req.body.comment,
+  });
+
+  comment
+    .save()
+    .then((result) => {
+      console.log(result);
+      res.redirect("/");
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+});
+
+app.get("/comments", (req, res) => {
+  Comment.find()
+    .then((result) => {
+      res.send(result);
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+});
+
+app.listen(port, () => console.log(`Example app listening on port ${port}!`));
